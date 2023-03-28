@@ -1,0 +1,97 @@
+unit KBHook;
+
+interface
+
+uses
+  Windows, Messages, SysUtils;
+
+type
+  TKeyCombo = record
+    Key1: Word;
+    Key2: Word;
+  end;
+
+  TKeyboardHook = class
+  private
+    FHotKeyCombo: TKeyCombo;
+    FHookHandle: HHOOK;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure SetHotKeyCombo(Key1, Key2: Word);
+  end;
+
+var
+  KeyboardHook: TKeyboardHook;
+
+implementation
+
+const
+  WH_KEYBOARD_LL = 13;
+
+type
+  KBDLLHOOKSTRUCT = record
+    vkCode: DWORD;
+    scanCode: DWORD;
+    flags: DWORD;
+    time: DWORD;
+    dwExtraInfo: ULONG_PTR;
+  end;
+  PKBDLLHOOKSTRUCT = ^KBDLLHOOKSTRUCT;
+
+function KeyboardHookProc(nCode: Integer; wParam: WPARAM; lParam: LPARAM): LRESULT; stdcall;
+var
+  keyEvent: PKBDLLHOOKSTRUCT;
+begin
+  if nCode < 0 then
+  begin
+    Result := CallNextHookEx(KeyboardHook.FHookHandle, nCode, wParam, lParam);
+    Exit;
+  end;
+
+  keyEvent := PKBDLLHOOKSTRUCT(lParam);
+  if (wParam = WM_KEYDOWN) or (wParam = WM_SYSKEYDOWN) then
+  begin
+    if keyEvent^.vkCode = KeyboardHook.FHotKeyCombo.Key1 then
+      KeyboardHook.FHotKeyCombo.Key2 := 0
+    else if keyEvent^.vkCode = KeyboardHook.FHotKeyCombo.Key2 then
+    begin
+      // Hotkey combo detected, perform your desired action
+      MessageBox(0, 'Hotkey combo detected!', 'Information', MB_OK or MB_ICONINFORMATION);
+    end
+    else
+      KeyboardHook.FHotKeyCombo.Key2 := keyEvent^.vkCode;
+  end;
+
+  Result := CallNextHookEx(KeyboardHook.FHookHandle, nCode, wParam, lParam);
+end;
+
+constructor TKeyboardHook.Create;
+begin
+  inherited;
+  FHookHandle := SetWindowsHookEx(WH_KEYBOARD_LL, @KeyboardHookProc, HInstance, 0);
+  if FHookHandle = 0 then
+    raise Exception.Create('Failed to set keyboard hook.');
+end;
+
+destructor TKeyboardHook.Destroy;
+begin
+  if FHookHandle <> 0 then
+    UnhookWindowsHookEx(FHookHandle);
+  inherited;
+end;
+
+procedure TKeyboardHook.SetHotKeyCombo(Key1, Key2: Word);
+begin
+  FHotKeyCombo.Key1 := Key1;
+  FHotKeyCombo.Key2 := Key2;
+end;
+
+initialization
+  KeyboardHook := TKeyboardHook.Create;
+
+finalization
+  KeyboardHook.Free;
+
+end.
+
