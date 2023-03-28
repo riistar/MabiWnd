@@ -30,11 +30,6 @@ const
   CONFIG_FILENAME = 'MabiWnd.cfg';
   DEBUG = FALSE;
 
-const
-  VK_A = $41;
-  VK_B = $42;
-  VK_C = $43;
-
 var
   Locale          : TFormatSettings;
   CfgFile         : TIniFile;

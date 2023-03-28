@@ -15,7 +15,8 @@ uses
   System.Classes,
   Windows,
   GameWindow in 'GameWindow.pas',
-  Tools in 'Tools.pas';
+  Tools in 'Tools.pas',
+  HotKey in 'HotKey.pas';
 
 {$R *.res}
 
