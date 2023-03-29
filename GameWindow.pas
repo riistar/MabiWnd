@@ -292,8 +292,6 @@ initialization
     ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID);
   end;
 
-
-
 // ========================================================================================================================
 // All code below is excuted when this module is unloaded according to compile order
 finalization
