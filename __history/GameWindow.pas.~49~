@@ -2,7 +2,7 @@ unit GameWindow;
 
 interface
 
-uses SysUtils, StrUtils, Classes, Windows, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs;
+uses SysUtils, StrUtils, Classes, Windows, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs, Variants;
 
  type
    GameWin = Class
@@ -30,21 +30,17 @@ const
   CONFIG_FILENAME = 'MabiWnd.cfg';
   DEBUG = FALSE;
 
-const
-  VK_A = $41;
-  VK_B = $42;
-  VK_C = $43;
-
 var
   Locale          : TFormatSettings;
   CfgFile         : TIniFile;
   ThreadHandle    : THandle;
   dwThreadID      : Cardinal = 0;
   Wnd             : hWND;
+  Config          : String;
 
 implementation
 
-uses Tools, HotKey;
+uses Tools;
 
 Procedure WriteLog(Data : string; Enabled: Boolean);
 var
@@ -68,43 +64,30 @@ begin
   end;
 end;
 
-function ReadCFGb(Section: String; Key: String): Boolean;
+// Reads Config value based on Type
+{
+  Str  := ReadCFG('myconfig.ini', 'Section1', 'Key1', 'DefaultString');
+  Int  := ReadCFG('myconfig.ini', 'Section2', 'Key2', 123);
+  Bool := ReadCFG('myconfig.ini', 'Section3', 'Key3', True);
+}
+function ReadCFG(const FileName: string; const Section, Key: string; const DefaultValue: Variant): Variant;
+var
+  IniFile: TIniFile;
 begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadBool(Section, Key, FALSE);
+  IniFile := TIniFile.Create(FileName);
+  try
+    case VarType(DefaultValue) of
+      varInteger:
+        Result := IniFile.ReadInteger(Section, Key, DefaultValue);
+      varBoolean:
+        Result := IniFile.ReadBool(Section, Key, DefaultValue);
+    else
+      Result := IniFile.ReadString(Section, Key, DefaultValue);
+    end;
+  finally
+    IniFile.Free;
   end;
-  CfgFile.Free;
 end;
-
-// ReadCFGi : Read Integer (0 or 1) from config file
-// ----------------------------------------------------------------------------
-function ReadCFGi(Section: String; Key: String): Integer;
-begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadInteger(Section, Key, 0);
-  end;
-  CfgFile.Free;
-end;
-
-// ReadCFGs : Read Integer (0 or 1) from config file
-// ----------------------------------------------------------------------------
-function ReadCFGs(Section: String; Key: String): string;
-begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadString(Section, Key, '');
-  end;
-  CfgFile.Free;
-end;
-
 
  // Constructor : Create an instance of the class. Takes a string as argument.
  // -----------------------------------------------------------------------------
@@ -120,7 +103,7 @@ begin
 
   GetMem(FromClass, 100);
   GetClassName(GetForeGroundWindow, PChar(FromClass), 800);
-  WriteLog('[Resize WND]  Wnd Class: '+StrPas(FromClass), DEBUG);
+  WriteLog('Wnd Class: '+StrPas(FromClass), DEBUG);
 
   result := StrPas(FromClass);
   FreeMem(FromClass);
@@ -232,29 +215,29 @@ begin
     0: begin
           SwitchToThisWindow(MabiHWND, True);
           EnableMxButton(MabiHWND, True);
-          WriteLog('[Resize WND]  Window Mode set to: EnableMxBTN', TRUE);
-          WriteLog('[Resize WND]  Enabled maximize button', TRUE);
+          WriteLog('Window Mode set to: EnableMxBTN', TRUE);
+          WriteLog('Enabled maximize button', TRUE);
           result := TRUE;
        end;
     1: begin
           SwitchToThisWindow(MabiHWND, True);
           EnableMxButton(MabiHWND, True);
           ShowWindow(MabiHWND, SW_MAXIMIZE);
-          WriteLog('[Resize WND]  Window Mode set to: AutoMx', TRUE);
-          WriteLog('[Resize WND]  Enabled maximize button and Maximized window!', TRUE);
+          WriteLog('Window Mode set to: AutoMx', TRUE);
+          WriteLog('Enabled maximize button and Maximized window!', TRUE);
           result := TRUE;
        end;
     2: begin
           SwitchToThisWindow(MabiHWND, True);
           MakeFullscreenBorderless(MabiHWND);
-          WriteLog('[Resize WND]  Window Mode set to: BorderlessFS', TRUE);
-          WriteLog('[Resize WND]  Window maximized to Full Screen Boarderless!', TRUE);
+          WriteLog('Window Mode set to: BorderlessFS', TRUE);
+          WriteLog('Window maximized to Full Screen Boarderless!', TRUE);
           result := TRUE;
        end;
     else
     begin
-      WriteLog('[Resize WND]  Window Mode invalid, check cfg!', TRUE);
-      WriteLog('[Resize WND]  Ending thread...', TRUE);
+      WriteLog('Window Mode invalid, check cfg!', TRUE);
+      WriteLog('Ending thread...', TRUE);
       EndThread(0);
       result := FALSE;
     end;
@@ -269,7 +252,7 @@ var
   MabiWnd: GameWin;
 begin
 
-  WriteLog('[Resize WND]  Entered thread...', TRUE);
+  WriteLog('Find window thread created...', TRUE);
   WinModeEx := FALSE;
 
   Try
@@ -283,7 +266,7 @@ begin
     Repeat
       if MabiWnd.CheckWnd = 'Mabinogi' then
       begin
-        WriteLog('[Resize WND]  Mabinogi window found, changing window mode...', TRUE);
+        WriteLog('Mabinogi window found, changing window mode...', TRUE);
         WinModeEx := MabiWnd.WindowMode(GetForeGroundWindow,ReadCFGs('MabiWindow','Mode'));
       end;
     until WinModeEx = TRUE;
@@ -292,46 +275,23 @@ begin
       WriteLog(E.ClassName+' error raised, with message : '+E.Message, TRUE);
   End;
 
-    WriteLog('[Resize WND]  Ending thread...', TRUE);
+    WriteLog('Ending thread...', TRUE);
     EndThread(0);
 
-end;
-
-procedure HotKey;
-var
-  KeyComboMonitor: TKeyStateMonitor;
-begin
-  KeyComboMonitor := TKeyStateMonitor.Create([VK_LCONTROL, VK_SHIFT, VK_A]);
-  KeyComboMonitor.Start;
-
-  try
-    while True do
-    begin
-      if KeyComboMonitor.KeysPressed then
-      begin
-        // The key combination is currently pressed...
-        // Do something here...
-        ShowMessage('Hotkey Combo pressed!');
-      end;
-    end;
-  finally
-    KeyComboMonitor.Terminate;
-    KeyComboMonitor.WaitFor;
-    KeyComboMonitor.Free;
-  end;
 end;
 
 // ========================================================================================================================
 // All code below is excuted when this module is loaded according to compile order
 initialization
 
-  if ReadCFGb('MabiWindow','Enabled') then
+  Config := ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME;
+
+  if ReadCFG(Config,'MabiWindow','Enabled', FALSE) then
   begin
     DeleteFile(PWideChar(ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME));
     ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID);
   end;
 
-  //CreateThread(nil, 0, @HotKey, nil, 0, dwThreadID);
 
 // ========================================================================================================================
 // All code below is excuted when this module is unloaded according to compile order
