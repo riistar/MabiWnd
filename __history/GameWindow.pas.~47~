@@ -2,7 +2,7 @@ unit GameWindow;
 
 interface
 
-uses SysUtils, StrUtils, Classes, Windows, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs;
+uses SysUtils, StrUtils, Classes, Windows, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs, Variants;
 
  type
    GameWin = Class
@@ -30,21 +30,17 @@ const
   CONFIG_FILENAME = 'MabiWnd.cfg';
   DEBUG = FALSE;
 
-const
-  VK_A = $41;
-  VK_B = $42;
-  VK_C = $43;
-
 var
   Locale          : TFormatSettings;
   CfgFile         : TIniFile;
   ThreadHandle    : THandle;
   dwThreadID      : Cardinal = 0;
   Wnd             : hWND;
+  Config          : String;
 
 implementation
 
-uses Tools, HotKey;
+uses Tools;
 
 Procedure WriteLog(Data : string; Enabled: Boolean);
 var
@@ -68,43 +64,30 @@ begin
   end;
 end;
 
-function ReadCFGb(Section: String; Key: String): Boolean;
+// Reads Config value based on Type
+{
+  Str  := ReadCFG('myconfig.ini', 'Section1', 'Key1', 'DefaultString');
+  Int  := ReadCFG('myconfig.ini', 'Section2', 'Key2', 123);
+  Bool := ReadCFG('myconfig.ini', 'Section3', 'Key3', True);
+}
+function ReadCFG(const FileName: string; const Section, Key: string; const DefaultValue: Variant): Variant;
+var
+  IniFile: TIniFile;
 begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadBool(Section, Key, FALSE);
+  IniFile := TIniFile.Create(FileName);
+  try
+    case VarType(DefaultValue) of
+      varInteger:
+        Result := IniFile.ReadInteger(Section, Key, DefaultValue);
+      varBoolean:
+        Result := IniFile.ReadBool(Section, Key, DefaultValue);
+    else
+      Result := IniFile.ReadString(Section, Key, DefaultValue);
+    end;
+  finally
+    IniFile.Free;
   end;
-  CfgFile.Free;
 end;
-
-// ReadCFGi : Read Integer (0 or 1) from config file
-// ----------------------------------------------------------------------------
-function ReadCFGi(Section: String; Key: String): Integer;
-begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadInteger(Section, Key, 0);
-  end;
-  CfgFile.Free;
-end;
-
-// ReadCFGs : Read Integer (0 or 1) from config file
-// ----------------------------------------------------------------------------
-function ReadCFGs(Section: String; Key: String): string;
-begin
-  CfgFile := TIniFile.Create(ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME);
-
-  with CfgFile do
-  begin
-      Result := ReadString(Section, Key, '');
-  end;
-  CfgFile.Free;
-end;
-
 
  // Constructor : Create an instance of the class. Takes a string as argument.
  // -----------------------------------------------------------------------------
@@ -297,38 +280,18 @@ begin
 
 end;
 
-
-var
-  KeyComboMonitor: TKeyStateMonitor;
-
 // ========================================================================================================================
 // All code below is excuted when this module is loaded according to compile order
 initialization
 
-  if ReadCFGb('MabiWindow','Enabled') then
+  Config := ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME;
+
+  if ReadCFG(Config,'MabiWindow','Enabled', FALSE) then
   begin
     DeleteFile(PWideChar(ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME));
-    ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID)
+    ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID);
   end;
 
-  KeyComboMonitor := TKeyStateMonitor.Create([VK_LCONTROL, VK_SHIFT, VK_A]);
-  KeyComboMonitor.Start;
-
-  try
-    while True do
-    begin
-      if KeyComboMonitor.KeysPressed then
-      begin
-        // The key combination is currently pressed...
-        // Do something here...
-        ShowMessage('Hotkey Combo pressed!');
-      end;
-    end;
-  finally
-    KeyComboMonitor.Terminate;
-    KeyComboMonitor.WaitFor;
-    KeyComboMonitor.Free;
-  end;
 
 // ========================================================================================================================
 // All code below is excuted when this module is unloaded according to compile order

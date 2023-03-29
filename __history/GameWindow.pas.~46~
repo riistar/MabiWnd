@@ -39,7 +39,7 @@ var
 
 implementation
 
-uses Tools, HotKey;
+uses Tools;
 
 Procedure WriteLog(Data : string; Enabled: Boolean);
 var
@@ -292,10 +292,6 @@ begin
 
 end;
 
-var
-  MyThread: THotkeyThread;
-  Hotkey: THotkeyInfo;
-
 // ========================================================================================================================
 // All code below is excuted when this module is loaded according to compile order
 initialization
@@ -303,12 +299,9 @@ initialization
   if ReadCFGb('MabiWindow','Enabled') then
   begin
     DeleteFile(PWideChar(ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME));
-    ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID)
+    ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID);
   end;
 
-  Hotkey.Modifier := MOD_CONTROL or MOD_SHIFT;
-  Hotkey.VirtualKey := VK_F1;
-  CreateHotkeyThread(Hotkey);
 
 // ========================================================================================================================
 // All code below is excuted when this module is unloaded according to compile order
