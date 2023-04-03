@@ -2,22 +2,22 @@ unit GameWindow;
 
 interface
 
-uses SysUtils, StrUtils, Classes, Windows, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs, Variants;
+uses SysUtils, StrUtils, Classes, Windows, Messages, Winapi.MultiMon, System.IniFiles, Vcl.Dialogs, Variants, System.Generics.Collections;
 
  type
    GameWin = Class
      private
 
      public
-       MabiHWND : hWnd;
-       GameWindowName : String;
+      MabiHWND : hWnd;
+      GameWindowName : String;
+      WindowList: TArray<TWindowInfo>;
      published
 
       constructor Create; // Called when creating an instance (object) from this class
       function CheckWnd: String;
       function ResizeWindow(CurrentHWnd: HWND): Boolean;
-      function EnableMxButton(CurrentHWnd: HWND; Enable: Boolean): Boolean;
-      function HideMinMaxButtons(CurrentHWnd: HWND): Boolean;
+      function ModifyWindowButtons(CurrentHWnd: HWND; EnableMaximizeButton, HideMinMaxButtons: Boolean): Boolean;
       function MakeFullscreenBorderless(CurrentHWnd: HWND): Boolean;
       function WindowMode(MabiHWND: HWND; const Value: string): Boolean;
 
@@ -31,83 +31,35 @@ const
   DEBUG = FALSE;
 
 var
-  Locale          : TFormatSettings;
   CfgFile         : TIniFile;
   ThreadHandle    : THandle;
   dwThreadID      : Cardinal = 0;
   Wnd             : hWND;
   Config          : String;
+  Log             : String;
+
+  CurrentWindowIndex: Integer = -1;
 
 implementation
 
 uses Tools;
 
-Procedure WriteLog(Data : string; Enabled: Boolean);
-var
-  LogFile : TextFile;
-  formattedDateTime : string;
-  LOG : String;
-begin
-  IF ENABLED = TRUE THEN
-  Begin
-    LOG := ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME;
-    AssignFile(LogFile, LOG) ;
-
-    IF FileExists(LOG) <> TRUE THEN
-      Rewrite(LogFile)
-    ELSE
-      Append(LogFile);
-      GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, Locale);
-      DateTimeToString(formattedDateTime, Locale.ShortDateFormat+' hh:nnampm', now);
-      WriteLn(LogFile, '['+formattedDateTime+'] '+DATA);
-      CloseFile(LogFile) ;
-  end;
-end;
-
-// Reads Config value based on Type
-{
-  Str  := ReadCFG('myconfig.ini', 'Section1', 'Key1', 'DefaultString');
-  Int  := ReadCFG('myconfig.ini', 'Section2', 'Key2', 123);
-  Bool := ReadCFG('myconfig.ini', 'Section3', 'Key3', True);
-}
-function ReadCFG(const FileName: string; const Section, Key: string; const DefaultValue: Variant): Variant;
-var
-  IniFile: TIniFile;
-begin
-  IniFile := TIniFile.Create(FileName);
-  try
-    case VarType(DefaultValue) of
-      varInteger:
-        Result := IniFile.ReadInteger(Section, Key, DefaultValue);
-      varBoolean:
-        Result := IniFile.ReadBool(Section, Key, DefaultValue);
-    else
-      Result := IniFile.ReadString(Section, Key, DefaultValue);
-    end;
-  finally
-    IniFile.Free;
-  end;
-end;
-
- // Constructor : Create an instance of the class. Takes a string as argument.
- // -----------------------------------------------------------------------------
+// Constructor : Create an instance of the class. Takes a string as argument.
+// -----------------------------------------------------------------------------
 constructor GameWin.Create;
 begin
-    //Holder Space
+    //Holder Space, Just allow GameWin class to init
 end;
 
 function GameWin.CheckWnd: String;
 var
   FromClass: PChar;
 begin
-
   GetMem(FromClass, 100);
   GetClassName(GetForeGroundWindow, PChar(FromClass), 800);
-  WriteLog('Wnd Class: '+StrPas(FromClass), DEBUG);
-
+  Tools.WriteLog('Wnd Class: '+StrPas(FromClass), Log, DEBUG);
   result := StrPas(FromClass);
   FreeMem(FromClass);
-
 end;
 
 function GameWin.ResizeWindow(CurrentHWnd: HWND): Boolean;
@@ -133,8 +85,9 @@ begin
   end;
 end;
 
-function GameWin.EnableMxButton(CurrentHWnd: HWND; Enable: Boolean): Boolean;
+function GameWin.ModifyWindowButtons(CurrentHWnd: HWND; EnableMaximizeButton, HideMinMaxButtons: Boolean): Boolean;
 const
+  WS_MINIMIZEBOX = $00020000;
   WS_MAXIMIZEBOX = $00010000;
 var
   WindowStyle: NativeInt;
@@ -144,35 +97,22 @@ begin
   WindowStyle := GetWindowLongPtr(CurrentHWnd, GWL_STYLE);
   if WindowStyle = 0 then
     Exit;
-  // Enable or disable the maximize button by adding or removing the WS_MAXIMIZEBOX style flag
-  if Enable then
+
+  // Modify the window style based on the input parameters
+  if EnableMaximizeButton then
     WindowStyle := WindowStyle or WS_MAXIMIZEBOX
   else
     WindowStyle := WindowStyle and not WS_MAXIMIZEBOX;
+
+  if HideMinMaxButtons then
+  begin
+    WindowStyle := WindowStyle and not WS_MINIMIZEBOX;
+    WindowStyle := WindowStyle and not WS_MAXIMIZEBOX;
+  end;
+
   // Set the new window style
   if SetWindowLongPtr(CurrentHWnd, GWL_STYLE, WindowStyle) <> 0 then
     Result := True;
-end;
-
-function GameWin.HideMinMaxButtons(CurrentHWnd: HWND): Boolean;
-const
-  WS_MINIMIZEBOX = $00020000;
-  WS_MAXIMIZEBOX = $00010000;
-var
-  Style: DWORD;
-begin
-  // Get the current window style
-  Style := GetWindowLong(CurrentHWnd, GWL_STYLE);
-  if Style = 0 then
-  begin
-    Result := False;
-    Exit;
-  end;
-  // Remove the minimize and maximize buttons from the style
-  Style := Style and not WS_MINIMIZEBOX;
-  Style := Style and not WS_MAXIMIZEBOX;
-  // Set the new window style
-  Result := SetWindowLong(CurrentHWnd, GWL_STYLE, Style) <> 0;
 end;
 
 function GameWin.MakeFullscreenBorderless(CurrentHWnd: HWND): Boolean;
@@ -214,30 +154,30 @@ begin
   case AnsiIndexText(Value, ['EnableMxBTN', 'AutoMx', 'BorderlessFS']) of
     0: begin
           SwitchToThisWindow(MabiHWND, True);
-          EnableMxButton(MabiHWND, True);
-          WriteLog('Window Mode set to: EnableMxBTN', TRUE);
-          WriteLog('Enabled maximize button', TRUE);
+          ModifyWindowButtons(MabiHWND, TRUE, FALSE);
+          Tools.WriteLog('Window Mode set to: EnableMxBTN', Log, TRUE);
+          Tools.WriteLog('Enabled maximize button', Log, TRUE);
           result := TRUE;
        end;
     1: begin
           SwitchToThisWindow(MabiHWND, True);
-          EnableMxButton(MabiHWND, True);
+          ModifyWindowButtons(MabiHWND, TRUE, FALSE);
           ShowWindow(MabiHWND, SW_MAXIMIZE);
-          WriteLog('Window Mode set to: AutoMx', TRUE);
-          WriteLog('Enabled maximize button and Maximized window!', TRUE);
+          Tools.WriteLog('Window Mode set to: AutoMx', Log, TRUE);
+          Tools.WriteLog('Enabled maximize button and Maximized window!', Log, TRUE);
           result := TRUE;
        end;
     2: begin
           SwitchToThisWindow(MabiHWND, True);
           MakeFullscreenBorderless(MabiHWND);
-          WriteLog('Window Mode set to: BorderlessFS', TRUE);
-          WriteLog('Window maximized to Full Screen Boarderless!', TRUE);
+          Tools.WriteLog('Window Mode set to: BorderlessFS', Log, TRUE);
+          Tools.WriteLog('Window maximized to Full Screen Boarderless!', Log, TRUE);
           result := TRUE;
        end;
     else
     begin
-      WriteLog('Window Mode invalid, check cfg!', TRUE);
-      WriteLog('Ending thread...', TRUE);
+      Tools.WriteLog('Window Mode invalid, check cfg!', Log, TRUE);
+      Tools.WriteLog('Ending thread...', Log, TRUE);
       EndThread(0);
       result := FALSE;
     end;
@@ -252,30 +192,32 @@ var
   MabiWnd: GameWin;
 begin
 
-  WriteLog('Find window thread created...', TRUE);
+  Tools.WriteLog('Find window thread created...', Log, TRUE);
+  Tools.WriteLog('Window Mode: '+Tools.ReadCFG(Config,'MabiWindow','Mode', 'None'), Log, TRUE);
+
   WinModeEx := FALSE;
 
   Try
     MabiWnd := GameWin.Create;
   Except
     on E : Exception do
-      WriteLog(E.ClassName+' error raised, with message : '+E.Message, TRUE);
+     Tools.WriteLog(E.ClassName+' error raised, with message : '+E.Message, Log, TRUE);
   End;
 
   try
     Repeat
       if MabiWnd.CheckWnd = 'Mabinogi' then
       begin
-        WriteLog('Mabinogi window found, changing window mode...', TRUE);
-        WinModeEx := MabiWnd.WindowMode(GetForeGroundWindow,ReadCFGs('MabiWindow','Mode'));
+        Tools.WriteLog('Mabinogi window found, changing window mode...', Log, TRUE);
+        WinModeEx := MabiWnd.WindowMode(GetForeGroundWindow,Tools.ReadCFG(Config,'MabiWindow','Mode', 'None'));
       end;
     until WinModeEx = TRUE;
   Except
     on E : Exception do
-      WriteLog(E.ClassName+' error raised, with message : '+E.Message, TRUE);
+      Tools.WriteLog(E.ClassName+' error raised, with message : '+E.Message, Log, TRUE);
   End;
 
-    WriteLog('Ending thread...', TRUE);
+    Tools.WriteLog('Ending thread...', Log, TRUE);
     EndThread(0);
 
 end;
@@ -284,11 +226,12 @@ end;
 // All code below is excuted when this module is loaded according to compile order
 initialization
 
-  Config := ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME;
+  Config  := ExtractFilePath(Tools.GetModuleName)+CONFIG_FILENAME;
+  Log     := ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME;
 
   if ReadCFG(Config,'MabiWindow','Enabled', FALSE) then
   begin
-    DeleteFile(PWideChar(ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME));
+    DeleteFile(PWideChar(Log));
     ThreadHandle := CreateThread(nil, 0, @FindWHND, nil, 0, dwThreadID);
   end;
 
@@ -300,3 +243,47 @@ finalization
 
 end.
 
+
+{
+function GameWin.EnableMxButton(CurrentHWnd: HWND; Enable: Boolean): Boolean;
+const
+  WS_MAXIMIZEBOX = $00010000;
+var
+  WindowStyle: NativeInt;
+begin
+  Result := False;
+  // Get the current window style
+  WindowStyle := GetWindowLongPtr(CurrentHWnd, GWL_STYLE);
+  if WindowStyle = 0 then
+    Exit;
+  // Enable or disable the maximize button by adding or removing the WS_MAXIMIZEBOX style flag
+  if Enable then
+    WindowStyle := WindowStyle or WS_MAXIMIZEBOX
+  else
+    WindowStyle := WindowStyle and not WS_MAXIMIZEBOX;
+  // Set the new window style
+  if SetWindowLongPtr(CurrentHWnd, GWL_STYLE, WindowStyle) <> 0 then
+    Result := True;
+end;
+
+function GameWin.HideMinMaxButtons(CurrentHWnd: HWND): Boolean;
+const
+  WS_MINIMIZEBOX = $00020000;
+  WS_MAXIMIZEBOX = $00010000;
+var
+  Style: DWORD;
+begin
+  // Get the current window style
+  Style := GetWindowLong(CurrentHWnd, GWL_STYLE);
+  if Style = 0 then
+  begin
+    Result := False;
+    Exit;
+  end;
+  // Remove the minimize and maximize buttons from the style
+  Style := Style and not WS_MINIMIZEBOX;
+  Style := Style and not WS_MAXIMIZEBOX;
+  // Set the new window style
+  Result := SetWindowLong(CurrentHWnd, GWL_STYLE, Style) <> 0;
+end;
+}

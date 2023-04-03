@@ -3,7 +3,7 @@ unit Tools;
 interface
 
 uses
-  Windows, SysUtils, Classes, IniFiles, StrUtils, Math, PsAPI, TlHelp32;
+  Windows, SysUtils, Classes, IniFiles, StrUtils, Variants, Math, PsAPI, TlHelp32;
 
 Type
   NTSTATUS = cardinal;
@@ -34,7 +34,8 @@ Type
   function ByteToHex(InByte:byte):shortstring;
   function PointerToByteArray(Value: Pointer; const SizeInBytes: Cardinal = 4): xTypeByteArray;
 
-
+  Procedure WriteLog(Data : string; LOG : String;  Enabled: Boolean);
+  function ReadCFG(const FileName: string; const Section, Key: string; const DefaultValue: Variant): Variant;
 
 const
   STATUS_SUCCESS = $00000000;
@@ -44,7 +45,59 @@ const
   //THREAD_TERMINATE (0x0001)
   //THREAD_QUERY_INFORMATION (0x0040)
 
+var
+  Locale : TFormatSettings;
+
 implementation
+
+
+Procedure WriteLog(Data : string; LOG : String;  Enabled: Boolean);
+var
+  LogFile : TextFile;
+  formattedDateTime : string;
+  //LOG : String;
+begin
+  IF ENABLED = TRUE THEN
+  Begin
+    //LOG := ExtractFilePath(Tools.GetModuleName)+LOG_FILENAME;
+    AssignFile(LogFile, LOG) ;
+
+    IF FileExists(LOG) <> TRUE THEN
+      Rewrite(LogFile)
+    ELSE
+      Append(LogFile);
+      GetLocaleFormatSettings(LOCALE_SYSTEM_DEFAULT, Locale);
+      DateTimeToString(formattedDateTime, Locale.ShortDateFormat+' hh:nnampm', now);
+      WriteLn(LogFile, '['+formattedDateTime+'] '+DATA);
+      CloseFile(LogFile) ;
+  end;
+end;
+
+// Reads Config value based on Type
+{
+  Str  := ReadCFG('myconfig.ini', 'Section1', 'Key1', 'DefaultString');
+  Int  := ReadCFG('myconfig.ini', 'Section2', 'Key2', 123);
+  Bool := ReadCFG('myconfig.ini', 'Section3', 'Key3', True);
+}
+function ReadCFG(const FileName: string; const Section, Key: string; const DefaultValue: Variant): Variant;
+var
+  IniFile: TIniFile;
+begin
+  IniFile := TIniFile.Create(FileName);
+  try
+    case VarType(DefaultValue) of
+      varInteger:
+        Result := IniFile.ReadInteger(Section, Key, DefaultValue);
+      varBoolean:
+        Result := IniFile.ReadBool(Section, Key, DefaultValue);
+    else
+      Result := IniFile.ReadString(Section, Key, DefaultValue);
+    end;
+  finally
+    IniFile.Free;
+  end;
+end;
+
 
 function ByteToHex(InByte:byte):shortstring;
 const Digits:array[0..15] of char='0123456789ABCDEF';
