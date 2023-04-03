@@ -9,3 +9,4 @@ Currently allows
 * [X] Auto window resizing (max size of desktop)
 * [X] snap-to for desktop/multi-monitors
 * [X] FullScreen boarderless mode.
+
